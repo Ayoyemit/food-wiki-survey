@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Food Preference Survey{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  {% block body %}{% endblock %}
+  <div id="toast" class="toast"></div>
+  <script>
+    function showToast(msg, type = 'success', duration = 2500) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast toast--' + type + ' show';
+      setTimeout(() => t.classList.remove('show'), duration);
+    }
+    async function api(url, data = null) {
+      const opts = data
+        ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }
+        : { method: 'GET' };
+      try {
+        const res = await fetch(url, { ...opts, credentials: 'same-origin' });
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) return await res.json();
+        return { error: `Request failed (${res.status})` };
+      } catch (e) {
+        return { error: e.message || 'Network error' };
+      }
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

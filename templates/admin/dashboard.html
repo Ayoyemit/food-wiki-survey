@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Results — Food Preference Survey{% endblock %}
+{% block body %}
+<nav class="navbar">
+  <span class="navbar__title">Food Preference Survey · Results</span>
+  <div class="navbar__actions">
+    <a class="btn btn--ghost btn--sm" href="/" target="_blank">Open survey</a>
+    <a class="btn btn--ghost btn--sm" href="/admin/logout">Log out</a>
+  </div>
+</nav>
+
+<div class="admin">
+  <div class="stats" id="stats"></div>
+
+  <div class="admin__tabs">
+    <button class="tab active" data-view="rankings" onclick="showView('rankings')">Rankings</button>
+    <button class="tab" data-view="participants" onclick="showView('participants')">Participants</button>
+    <button class="tab" data-view="skips" onclick="showView('skips')">Can't decide</button>
+    <button class="tab" data-view="suggestions" id="suggTab" onclick="showView('suggestions')" style="display:none">Suggestions</button>
+  </div>
+
+  <section class="view" id="view-rankings">
+    <div class="toolbar">
+      <p class="muted">Scores are Bradley-Terry strengths mapped to 0–100 (50 = average). Rankings update after every vote.</p>
+      <div>
+        <a class="btn btn--sm" href="/api/admin/export/rankings.csv">Rankings CSV</a>
+        <a class="btn btn--sm" href="/api/admin/export/votes.csv">Votes CSV</a>
+        <a class="btn btn--sm btn--ghost" href="/api/admin/export/algorithm_logs.csv">Algorithm log CSV</a>
+      </div>
+    </div>
+    <div class="rank-grid" id="rankGrid"></div>
+  </section>
+
+  <section class="view" id="view-participants" style="display:none">
+    <table class="table" id="participantsTable">
+      <thead><tr><th>Session</th><th>Started (UTC)</th><th>Duration</th>{% for c in categories %}<th>{{ c }}</th>{% endfor %}<th>Total</th><th>Complete</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="view" id="view-skips" style="display:none">
+    <table class="table" id="skipsTable">
+      <thead><tr><th>When (UTC)</th><th>Group</th><th>Food A</th><th>Food B</th><th>Session</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="view" id="view-suggestions" style="display:none">
+    <table class="table" id="suggTable">
+      <thead><tr><th>When (UTC)</th><th>Group</th><th>Suggested food</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="cfg" type="application/json">{{ {"categories": categories}|tojson }}</script>
+<script>
+  const CATS = JSON.parse(document.getElementById('cfg').textContent).categories;
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const fmtDur = s => s < 60 ? `${Math.round(s)}s` : `${Math.floor(s/60)}m ${Math.round(s%60)}s`;
+  const fmtTs = t => t ? t.replace('T', ' ').slice(0, 16) : '';
+
+  function showView(v) {
+    document.querySelectorAll('.admin__tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.view === v));
+    document.querySelectorAll('.view').forEach(s => s.style.display = s.id === 'view-' + v ? '' : 'none');
+    if (v === 'participants') loadParticipants();
+    if (v === 'skips') loadSkips();
+    if (v === 'suggestions') loadSuggestions();
+  }
+
+  async function loadSummary() {
+    const d = await api('/api/admin/summary');
+    if (d.error) { showToast(d.error, 'error'); return; }
+    document.getElementById('stats').innerHTML = [
+      ['Participants', d.sessions_with_votes, `${d.total_sessions} started`],
+      ['Votes', d.total_votes, `${d.total_cant_decide} skipped`],
+      ['Foods', d.total_foods, `${d.categories.length} groups`],
+      ['Median time', fmtDur(d.median_duration_seconds), 'per participant'],
+    ].map(([k, v, sub]) => `<div class="stat"><p class="stat__k">${k}</p><p class="stat__v">${v}</p><p class="stat__sub">${sub}</p></div>`).join('');
+    document.getElementById('suggTab').style.display = d.suggestions_enabled ? '' : 'none';
+
+    document.getElementById('rankGrid').innerHTML = d.categories.map(c => `
+      <div class="rank-card">
+        <div class="rank-card__head"><h3>${esc(c.category)}</h3><span class="muted">${c.votes} votes</span></div>
+        ${c.rankings.map(r => `
+          <div class="rank-row">
+            <span class="rank-row__n">${r.rank}</span>
+            <div class="rank-row__body">
+              <div class="rank-row__top"><span class="rank-row__name">${esc(r.name)}</span><span class="rank-row__score">${r.score}</span></div>
+              <div class="rank-row__bar"><div style="width:${r.score}%"></div></div>
+              <div class="rank-row__meta">${r.wins} wins / ${r.appearances} shown${r.win_rate !== null ? ` · ${r.win_rate}% win rate` : ''}</div>
+            </div>
+          </div>`).join('')}
+      </div>`).join('');
+  }
+
+  async function loadParticipants() {
+    const d = await api('/api/admin/participants');
+    document.querySelector('#participantsTable tbody').innerHTML = (d.participants || []).map(p => `
+      <tr><td><code>${esc(p.id)}</code></td><td>${fmtTs(p.started_at)}</td><td>${fmtDur(p.duration_seconds)}</td>
+      ${CATS.map(c => `<td>${p.counts[c] || 0}</td>`).join('')}
+      <td><strong>${p.total_votes}</strong></td><td>${p.complete ? '✅' : ''}</td></tr>`).join('')
+      || '<tr><td colspan="99" class="muted">No participants yet</td></tr>';
+  }
+
+  async function loadSkips() {
+    const d = await api('/api/admin/cant-decides');
+    document.querySelector('#skipsTable tbody').innerHTML = (d.items || []).map(r => `
+      <tr><td>${fmtTs(r.created_at)}</td><td>${esc(r.category)}</td><td>${esc(r.food_a)}</td><td>${esc(r.food_b)}</td><td><code>${esc(r.session_id)}</code></td></tr>`).join('')
+      || '<tr><td colspan="5" class="muted">Nobody has skipped a pair yet</td></tr>';
+  }
+
+  async function loadSuggestions() {
+    const d = await api('/api/admin/suggestions');
+    document.querySelector('#suggTable tbody').innerHTML = (d.items || []).map(r => `
+      <tr><td>${fmtTs(r.created_at)}</td><td>${esc(r.category)}</td><td>${esc(r.text)}</td></tr>`).join('')
+      || '<tr><td colspan="3" class="muted">No suggestions yet</td></tr>';
+  }
+
+  loadSummary();
+  setInterval(loadSummary, 15000);
+</script>
+{% endblock %}

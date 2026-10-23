@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block body %}
+<main class="landing">
+  <div class="landing__card fade-in-up">
+    <p class="eyebrow">Food Preference Survey</p>
+    <h1 class="landing__title">Which would you rather eat?</h1>
+    <p class="landing__lead">
+      You will see two foods at a time. Tap the one you would rather eat.
+      There are three food groups: rice dishes, sandwiches and wraps, and main dishes.
+      It takes about two minutes.
+    </p>
+    <ul class="landing__facts">
+      <li>No sign-in and no personal information is collected.</li>
+      <li>There are no right or wrong answers; go with your first instinct.</li>
+      <li>If you really cannot choose, use <em>I can't decide</em> to skip a pair.</li>
+    </ul>
+
+    <label class="consent">
+      <input type="checkbox" id="consentCheck" onchange="document.getElementById('startBtn').disabled = !this.checked">
+      <span>I agree to take part in this short survey. My answers are anonymous and will be used for research on food preferences.</span>
+    </label>
+
+    <button class="btn btn--primary btn--lg" id="startBtn" disabled onclick="startSurvey()">Start</button>
+    <p class="landing__foot">Johns Hopkins University · Chat24 research team</p>
+  </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  async function startSurvey() {
+    const btn = document.getElementById('startBtn');
+    btn.disabled = true; btn.textContent = 'Starting…';
+    const res = await api('/api/start-session', {});
+    if (res.error) { showToast(res.error, 'error'); btn.disabled = false; btn.textContent = 'Start'; return; }
+    window.location.href = '/survey';
+  }
+</script>
+{% endblock %}

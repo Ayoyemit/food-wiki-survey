@@ -1,0 +1,5 @@
+# Railway Railpack uses mise to install Python from runtime.txt.
+# Older CPython builds (e.g. 3.12.3) lack GitHub artifact attestations,
+# which makes `mise install` fail. Disable attestation checks for Python.
+[settings]
+python.github_attestations = false

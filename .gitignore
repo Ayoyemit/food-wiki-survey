@@ -1,0 +1,30 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+
+# Local SQLite (keep data out of the repo)
+*.db
+instance/
+
+# Env files with secrets
+.env
+.env.*
+
+# Manuscript tooling & outputs (local only; not part of the deployed app)
+manuscript_outputs/
+generate_manuscript_outputs.py
+regen_fig1_fig7.py
+algorithm_logs.json
+algorithm_logs_*.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}Vote — Food Preference Survey{% endblock %}
+{% block body %}
+<nav class="navbar">
+  <span class="navbar__title">Food Preference Survey</span>
+  <button type="button" class="btn btn--ghost btn--sm" onclick="finish()">Finish</button>
+</nav>
+
+<div class="survey">
+  <!-- category tabs -->
+  <div class="tabs" id="tabs">
+    {% for c in categories %}
+    <button class="tab {% if loop.first %}active{% endif %}" data-cat="{{ c }}" onclick="switchCategory('{{ c }}')">
+      <span class="tab__name">{{ c }}</span>
+      <span class="tab__count" id="count-{{ loop.index }}">0 / {{ goal }}</span>
+    </button>
+    {% endfor %}
+  </div>
+
+  <main class="main">
+    <p class="eyebrow" id="catLabel">{{ categories[0] }}</p>
+    <h2 class="question">Which would you rather eat?</h2>
+    <p class="question__sub">Tap one of the two foods.</p>
+
+    <div class="pair" id="pair">
+      <button class="food-card" id="cardA" onclick="vote('A')"><span id="textA">Loading…</span></button>
+      <div class="pair__or">or</div>
+      <button class="food-card" id="cardB" onclick="vote('B')"><span id="textB">Loading…</span></button>
+    </div>
+
+    <button class="btn btn--ghost" id="skipBtn" onclick="cantDecide()">I can't decide</button>
+
+    <div class="progress">
+      <div class="progress__bar"><div class="progress__fill" id="progressFill" style="width:0%"></div></div>
+      <p class="progress__label" id="progressLabel">0 of {{ goal }} choices in this group</p>
+    </div>
+
+    {% if allow_suggestions %}
+    <div class="suggest">
+      <p class="suggest__title">Is a food you love missing?</p>
+      <div class="suggest__row">
+        <input type="text" id="suggestText" maxlength="200" placeholder="Suggest a food for this group">
+        <button class="btn btn--sm" onclick="suggest()">Send</button>
+      </div>
+    </div>
+    {% endif %}
+  </main>
+</div>
+
+<!-- group complete -->
+<div class="modal-backdrop" id="groupDone">
+  <div class="modal">
+    <div class="modal__emoji">🎉</div>
+    <h3 class="modal__title">Nice, that group is done</h3>
+    <p class="modal__text" id="groupDoneText"></p>
+    <div class="modal__actions">
+      <button class="btn btn--ghost" onclick="closeModal('groupDone')">Keep going here</button>
+      <button class="btn btn--primary" id="nextBtn" onclick="nextCategory()">Next group →</button>
+    </div>
+  </div>
+</div>
+
+<!-- all complete -->
+<div class="modal-backdrop" id="allDone">
+  <div class="modal">
+    <div class="modal__emoji">✅</div>
+    <h3 class="modal__title">Thank you!</h3>
+    <p class="modal__text">You have made choices in every food group. You can keep voting (every extra choice sharpens the results) or simply close this page.</p>
+    <div class="modal__actions">
+      <button class="btn btn--ghost" onclick="closeModal('allDone')">Keep voting</button>
+      <button class="btn btn--primary" onclick="finish()">I'm done</button>
+      <button class="btn btn--primary" onclick="startOver(this)">Start over</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="finished">
+  <div class="modal">
+    <div class="modal__emoji">🙏</div>
+    <h3 class="modal__title">Thanks for taking part</h3>
+    <p class="modal__text">Your answers have been recorded. You can close this page now.</p>
+    <div class="modal__actions">
+      <button class="btn btn--primary" onclick="startOver(this)">Start over</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="cfg" type="application/json">{{ {"categories": categories, "goal": goal}|tojson }}</script>
+<script>
+  const CFG = JSON.parse(document.getElementById('cfg').textContent);
+  const CATS = CFG.categories, GOAL = CFG.goal;
+  let current = CATS[0];
+  let pair = { a: null, b: null, logId: null };
+  let counts = {};
+  const celebrated = new Set();
+  let allDoneShown = false;
+  let busy = false;
+
+  function $(id) { return document.getElementById(id); }
+  function openModal(id) { $(id).classList.add('show'); }
+  function closeModal(id) { $(id).classList.remove('show'); }
+
+  async function loadPair() {
+    busy = true;
+    $('pair').classList.add('loading');
+    const res = await api('/api/get-pair', { category: current });
+    if (res.error) { showToast(res.error, 'error'); busy = false; return; }
+    pair = { a: res.food_a, b: res.food_b, logId: res.algo_log_id };
+    $('textA').textContent = res.food_a.name;
+    $('textB').textContent = res.food_b.name;
+    $('pair').classList.remove('loading');
+    busy = false;
+  }
+
+  async function vote(side) {
+    if (busy || !pair.a) return;
+    busy = true;
+    const winner = side === 'A' ? pair.a : pair.b;
+    const loser = side === 'A' ? pair.b : pair.a;
+    $(side === 'A' ? 'cardA' : 'cardB').classList.add('chosen');
+    const res = await api('/api/vote', { winner_id: winner.id, loser_id: loser.id, category: current, algo_log_id: pair.logId });
+    setTimeout(() => { $('cardA').classList.remove('chosen'); $('cardB').classList.remove('chosen'); }, 220);
+    if (res.error) { showToast(res.error, 'error'); busy = false; return; }
+    counts = res.counts || counts;
+    updateProgress();
+    await loadPair();
+    checkMilestones();
+  }
+
+  async function cantDecide() {
+    if (busy || !pair.a) return;
+    busy = true;
+    await api('/api/cant-decide', { food_a_id: pair.a.id, food_b_id: pair.b.id, category: current, algo_log_id: pair.logId });
+    await loadPair();
+  }
+
+  async function suggest() {
+    const el = $('suggestText');
+    const text = (el.value || '').trim();
+    if (!text) return;
+    const res = await api('/api/suggest', { text, category: current });
+    if (res.error) { showToast(res.error, 'error'); return; }
+    el.value = '';
+    showToast('Thanks, your suggestion was sent.');
+  }
+
+  function switchCategory(cat) {
+    if (busy) return;
+    current = cat;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.cat === cat));
+    $('catLabel').textContent = cat;
+    updateProgress();
+    loadPair();
+  }
+
+  function updateProgress() {
+    CATS.forEach((c, i) => {
+      const n = counts[c] || 0;
+      const el = $('count-' + (i + 1));
+      el.textContent = `${Math.min(n, GOAL)} / ${GOAL}`;
+      document.querySelector(`.tab[data-cat="${CSS.escape(c)}"]`).classList.toggle('done', n >= GOAL);
+    });
+    const n = counts[current] || 0;
+    $('progressFill').style.width = Math.min(100, 100 * n / GOAL) + '%';
+    $('progressLabel').textContent = n >= GOAL
+      ? `${n} choices in this group — goal reached, extra votes still count`
+      : `${n} of ${GOAL} choices in this group`;
+  }
+
+  function checkMilestones() {
+    const n = counts[current] || 0;
+    const allDone = CATS.every(c => (counts[c] || 0) >= GOAL);
+    if (allDone && !allDoneShown) { allDoneShown = true; openModal('allDone'); return; }
+    if (n >= GOAL && !celebrated.has(current)) {
+      celebrated.add(current);
+      const remaining = CATS.filter(c => (counts[c] || 0) < GOAL);
+      $('groupDoneText').textContent = remaining.length
+        ? `You finished "${current}". ${remaining.length} group${remaining.length > 1 ? 's' : ''} to go.`
+        : `You finished "${current}".`;
+      $('nextBtn').style.display = remaining.length ? '' : 'none';
+      openModal('groupDone');
+    }
+  }
+
+  function nextCategory() {
+    closeModal('groupDone');
+    const next = CATS.find(c => (counts[c] || 0) < GOAL);
+    if (next) switchCategory(next);
+  }
+
+  async function finish() {
+    closeModal('allDone');
+    await api('/api/end-session', {});
+    openModal('finished');
+  }
+
+  async function startOver(btn) {
+    btn.disabled = true;
+    btn.textContent = 'Starting…';
+    let res = await api('/api/end-session', {});
+    if (res.error) {
+      showToast(res.error, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Start over';
+      return;
+    }
+    res = await api('/api/start-session', {});
+    if (res.error) {
+      showToast(res.error, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Start over';
+      return;
+    }
+    window.location.href = '/survey';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') vote('A');
+    if (e.key === 'ArrowRight') vote('B');
+  });
+
+  (async () => {
+    counts = await api('/api/counts');
+    updateProgress();
+    await loadPair();
+    setInterval(() => api('/api/heartbeat', {}), 30000);
+  })();
+</script>
+{% endblock %}

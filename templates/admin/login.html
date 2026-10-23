@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Admin — Food Preference Survey{% endblock %}
+{% block body %}
+<main class="landing">
+  <div class="landing__card landing__card--narrow fade-in-up">
+    <p class="eyebrow">Study team</p>
+    <h1 class="landing__title">Admin access</h1>
+    <p class="landing__lead">Enter the access code to open the results dashboard.</p>
+    <input type="password" class="input" id="code" placeholder="Access code" autofocus
+           onkeydown="if (event.key === 'Enter') login()">
+    <p id="err" class="error" style="display:none">Invalid access code</p>
+    <button class="btn btn--primary btn--lg" onclick="login()">Open dashboard</button>
+    <p class="landing__foot"><a href="/">← Back to survey</a></p>
+  </div>
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+  async function login() {
+    const res = await api('/api/admin/login', { code: document.getElementById('code').value });
+    if (res.success) window.location.href = res.redirect;
+    else document.getElementById('err').style.display = 'block';
+  }
+</script>
+{% endblock %}
