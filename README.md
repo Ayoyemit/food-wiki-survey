@@ -7,9 +7,9 @@ demographics, no organization- or system-level tagging: food options only.
 
 | Group | Foods |
 |---|---|
-| Rice dishes | Chicken fried rice · Chicken biryani · Vegetable fried rice · Brown rice with grilled chicken |
-| Sandwiches and wraps | Turkey and cheese sandwich · Grilled chicken sandwich · Hummus and vegetable wrap · Tuna salad sandwich |
-| Main dishes | Grilled salmon with vegetables · Roast chicken with potatoes · Beef tacos · Vegetable curry with rice |
+| Whole-grain rice dishes | Chicken and vegetable brown-rice stir-fry · Baked chicken biryani with brown rice · Vegetable and lentil brown rice · Brown rice with grilled chicken and greens |
+| Whole-grain sandwiches and wraps | Turkey and avocado sandwich on whole-grain bread · Grilled chicken and vegetable sandwich on whole-grain bread · Hummus and vegetable wrap in a whole-grain tortilla · Tuna and white-bean salad on whole-grain bread |
+| Grilled and baked mains | Grilled salmon with vegetables · Roast chicken with roasted vegetables · Bean and vegetable tacos on corn tortillas · Lentil and vegetable curry with brown rice |
 
 Pairs are chosen adaptively with the same Bradley-Terry MAP selector as IMPACT S2S
 (`algorithm.py`, unchanged), and the rankings are Bradley-Terry strengths. The whole thing
